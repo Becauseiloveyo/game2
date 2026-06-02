@@ -7,7 +7,7 @@ let scanTimer = 0;
 let hintTimer = 0;
 let lastDeadlock = '';
 let latestAnalysis = { board: null, moves: [] };
-let panelPinnedClosed = false;
+let panelOpen = false;
 
 function showHud(message, ms = 1600) {
   let hud = document.getElementById(HUD_ID);
@@ -135,22 +135,23 @@ function highlightMove(move) {
   clearHint();
   move.first.element.classList.add('crystal-link-hint-cell', 'crystal-link-hint-primary');
   move.second.element.classList.add('crystal-link-hint-cell');
-  hintTimer = setTimeout(clearHint, 2600);
+  hintTimer = setTimeout(clearHint, 2400);
 }
 
 function showBestMove() {
   const board = readBoard();
-  if (!board) return showHud('正在识别棋盘；请确认已进入 8×8 对局画面', 2200);
+  if (!board) return showHud('正在识别棋盘；请确认已进入 8×8 对局画面', 1800);
   const moves = findMoves(board);
   latestAnalysis = { board, moves };
-  panelPinnedClosed = false;
   updatePanel(board, moves);
   if (!moves.length) {
     lastDeadlock = board.signature;
-    return showHud('当前棋盘无有效交换，可用救场洗牌', 2300);
+    panelOpen = true;
+    updatePanel(board, moves);
+    return showHud('当前棋盘无有效交换，可用救场洗牌', 2000);
   }
   highlightMove(moves[0]);
-  showHud(`推荐走法已标出，约有 ${moves.length} 个可行交换`, 1900);
+  showHud(`推荐走法已标出：${moves.length} 个可行交换`, 1600);
 }
 
 function coachButton() {
@@ -161,7 +162,7 @@ function coachButton() {
     button.type = 'button';
     button.dataset.safeClick = 'off';
     button.className = 'crystal-link-coach';
-    button.innerHTML = '<span>星盘面板</span><strong>↗</strong>';
+    button.innerHTML = '<span>助手</span><strong>?</strong>';
     button.addEventListener('click', togglePanel);
     document.body.appendChild(button);
   }
@@ -175,21 +176,21 @@ function panel() {
     node.id = PANEL_ID;
     node.className = 'crystal-link-strategy-panel';
     node.innerHTML = `
-      <div class="strategy-title"><span>星盘分析</span><button data-action="collapse" type="button">×</button></div>
+      <div class="strategy-title"><span>战术助手</span><button data-action="collapse" type="button">×</button></div>
       <div class="strategy-grid">
-        <div><small>可行交换</small><strong data-stat="moves">--</strong></div>
-        <div><small>最佳收益</small><strong data-stat="best">--</strong></div>
+        <div><small>走法</small><strong data-stat="moves">--</strong></div>
+        <div><small>收益</small><strong data-stat="best">--</strong></div>
       </div>
-      <p data-stat="status">等待棋盘稳定...</p>
+      <p data-stat="status">进入对局后自动分析。</p>
       <div class="strategy-actions">
-        <button data-action="hint" type="button">标出推荐</button>
-        <button data-action="shuffle" type="button">救场洗牌</button>
+        <button data-action="hint" type="button">推荐</button>
+        <button data-action="shuffle" type="button">洗牌</button>
       </div>`;
     node.querySelector('[data-action="hint"]').addEventListener('click', showBestMove);
     node.querySelector('[data-action="shuffle"]').addEventListener('click', rescueShuffle);
     node.querySelector('[data-action="collapse"]').addEventListener('click', () => {
-      panelPinnedClosed = true;
-      node.classList.remove('is-visible');
+      panelOpen = false;
+      updatePanel(latestAnalysis.board, latestAnalysis.moves);
     });
     document.body.appendChild(node);
   }
@@ -197,34 +198,35 @@ function panel() {
 }
 
 function togglePanel() {
-  const node = panel();
-  panelPinnedClosed = node.classList.contains('is-visible');
-  node.classList.toggle('is-visible');
-  const button = coachButton();
-  button.querySelector('span').textContent = node.classList.contains('is-visible') ? '收起面板' : '星盘面板';
+  const inGame = looksLikeGameScreen() || Boolean(latestAnalysis.board);
+  if (!inGame) return showHud('进入对局后可使用战术助手', 1500);
+  panelOpen = !panelOpen;
+  updatePanel(latestAnalysis.board, latestAnalysis.moves);
 }
 
 function updatePanel(board, moves) {
   const node = panel();
-  const shouldShow = (Boolean(board) || looksLikeGameScreen()) && !panelPinnedClosed;
-  node.classList.toggle('is-visible', shouldShow);
+  const inGame = Boolean(board) || looksLikeGameScreen();
+  if (!inGame) panelOpen = false;
+  node.classList.toggle('is-visible', inGame && panelOpen);
+  node.classList.toggle('is-deadlock', Boolean(board) && moves.length === 0);
   const button = coachButton();
-  button.querySelector('span').textContent = node.classList.contains('is-visible') ? '收起面板' : '星盘面板';
+  button.querySelector('span').textContent = panelOpen ? '收起' : '助手';
   node.querySelector('[data-stat="moves"]').textContent = board ? String(moves.length) : '--';
   node.querySelector('[data-stat="best"]').textContent = moves[0] ? String(moves[0].score) : '--';
   const status = node.querySelector('[data-stat="status"]');
   const shuffle = node.querySelector('[data-action="shuffle"]');
   if (!board) {
-    status.textContent = '正在等待 8×8 棋盘渲染完成。';
+    status.textContent = '等待棋盘稳定。';
     shuffle.disabled = true;
   } else if (!moves.length) {
-    status.textContent = '检测到死局。建议洗牌，不建议继续尝试随机交换。';
+    status.textContent = '死局。建议洗牌。';
     shuffle.disabled = false;
   } else if (moves[0].score >= 65) {
-    status.textContent = '存在高价值走法，优先触发 4 连或更大消除。';
+    status.textContent = '高价值走法可用。';
     shuffle.disabled = true;
   } else {
-    status.textContent = '棋盘正常。建议选择收益最高的相邻交换。';
+    status.textContent = moves.length <= 4 ? '可选空间偏少。' : '局面正常。';
     shuffle.disabled = true;
   }
 }
@@ -237,11 +239,13 @@ function findShuffleButton() {
 function rescueShuffle() {
   const button = findShuffleButton();
   if (!button || button.disabled) {
-    showHud('未找到可用洗牌按钮，请手动使用右下道具', 2200);
+    showHud('没有可用洗牌道具', 1700);
     return;
   }
   button.click();
-  showHud('已触发洗牌道具，等待棋盘重构', 1800);
+  panelOpen = false;
+  updatePanel(latestAnalysis.board, latestAnalysis.moves);
+  showHud('已触发洗牌', 1400);
 }
 
 function looksLikeGameScreen() {
@@ -258,13 +262,12 @@ function analyzeSoon() {
     const visible = Boolean(board) || looksLikeGameScreen();
     coachButton().classList.toggle('is-visible', visible);
     updatePanel(board, moves);
-    if (!visible) panelPinnedClosed = false;
     if (!board) return clearHint();
     if (!moves.length && lastDeadlock !== board.signature) {
       lastDeadlock = board.signature;
-      panelPinnedClosed = false;
+      panelOpen = true;
       updatePanel(board, moves);
-      showHud('检测到死局：可点面板里的救场洗牌', 2400);
+      showHud('检测到死局，已打开助手', 2200);
     }
   }, 320);
 }
