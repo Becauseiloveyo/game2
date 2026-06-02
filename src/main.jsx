@@ -3,8 +3,10 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import './enhancements.css'
 import './gameplayOptimizer.css'
+import './gameplayPolish.css'
 import './runtimeEnhancements.js'
 import './gameplayOptimizer.js'
+import './gameplayPolish.js'
 import App from './App.jsx'
 
 createRoot(document.getElementById('root')).render(
