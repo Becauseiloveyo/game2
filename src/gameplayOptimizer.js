@@ -20,25 +20,38 @@ function showHud(message, ms = 1600) {
   showHud.timer = setTimeout(() => hud.classList.remove('is-visible'), ms);
 }
 
-function getType(button) {
-  const hit = (button.innerHTML || '').match(/grad-(red|blue|green|yellow|purple|orange)/);
+function getType(element) {
+  const html = element?.outerHTML || element?.innerHTML || '';
+  const hit = html.match(/grad-(red|blue|green|yellow|purple|orange)/);
   return hit ? GEM_NAMES.indexOf(hit[1]) : -1;
 }
 
+function cellHost(svg) {
+  return svg.closest('button,[role="button"],[tabindex]') || svg.parentElement || svg;
+}
+
 function visibleGemCells() {
-  return [...document.querySelectorAll('button')].map((button) => {
-    const rect = button.getBoundingClientRect();
+  const seen = new Set();
+  return [...document.querySelectorAll('svg')].map((svg) => {
+    const type = getType(svg);
+    const host = cellHost(svg);
+    if (seen.has(host)) return null;
+    seen.add(host);
+
+    const hostRect = host.getBoundingClientRect();
+    const svgRect = svg.getBoundingClientRect();
+    const rect = hostRect.width >= 24 && hostRect.height >= 24 ? hostRect : svgRect;
     return {
-      button,
+      element: host,
       rect,
-      type: getType(button),
+      type,
       x: rect.left + rect.width / 2,
       y: rect.top + rect.height / 2
     };
   }).filter((cell) =>
-    cell.type >= 0 && cell.rect.width >= 24 && cell.rect.height >= 24 &&
+    cell && cell.type >= 0 && cell.rect.width >= 24 && cell.rect.height >= 24 &&
     cell.rect.bottom > 0 && cell.rect.right > 0 &&
-    cell.rect.top < innerHeight && cell.rect.left < innerWidth
+    cell.rect.top < window.innerHeight && cell.rect.left < window.innerWidth
   );
 }
 
@@ -128,15 +141,15 @@ function clearHint() {
 
 function showBestMove() {
   const board = readBoard();
-  if (!board) return showHud('进入关卡后才能分析棋盘');
+  if (!board) return showHud('正在识别棋盘；请确认已进入 8×8 对局画面', 2200);
   const moves = findMoves(board);
   if (!moves.length) {
     lastDeadlock = board.signature;
     return showHud('当前棋盘无有效交换，建议使用洗牌道具', 2300);
   }
   clearHint();
-  moves[0].first.button.classList.add('crystal-link-hint-cell', 'crystal-link-hint-primary');
-  moves[0].second.button.classList.add('crystal-link-hint-cell');
+  moves[0].first.element.classList.add('crystal-link-hint-cell', 'crystal-link-hint-primary');
+  moves[0].second.element.classList.add('crystal-link-hint-cell');
   hintTimer = setTimeout(clearHint, 2400);
   showHud(`推荐走法已标出，约有 ${moves.length} 个可行交换`, 1900);
 }
@@ -156,11 +169,16 @@ function coachButton() {
   return button;
 }
 
+function looksLikeGameScreen() {
+  const text = document.body?.innerText || '';
+  return text.includes('MOVES') || text.includes('LV.') || visibleGemCells().length >= 16;
+}
+
 function analyzeSoon() {
   clearTimeout(scanTimer);
   scanTimer = setTimeout(() => {
     const board = readBoard();
-    coachButton().classList.toggle('is-visible', Boolean(board));
+    coachButton().classList.toggle('is-visible', Boolean(board) || looksLikeGameScreen());
     if (!board) return clearHint();
     const moves = findMoves(board);
     if (!moves.length && lastDeadlock !== board.signature) {
@@ -183,7 +201,7 @@ function boot() {
     }
   }, true);
   addEventListener('resize', analyzeSoon, { passive: true });
-  setInterval(analyzeSoon, 1800);
+  setInterval(analyzeSoon, 1200);
   analyzeSoon();
 }
 
