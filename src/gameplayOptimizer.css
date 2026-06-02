@@ -39,6 +39,108 @@
   font-size: 0.82rem;
 }
 
+.crystal-link-strategy-panel {
+  position: fixed;
+  left: max(1rem, env(safe-area-inset-left));
+  top: 50%;
+  z-index: 81;
+  width: min(15.5rem, calc(100vw - 2rem));
+  padding: 0.9rem;
+  border: 1px solid rgba(103, 232, 249, 0.22);
+  border-radius: 1.25rem;
+  background: linear-gradient(160deg, rgba(2, 6, 23, 0.82), rgba(15, 23, 42, 0.68));
+  color: rgba(226, 232, 240, 0.96);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.38), 0 0 35px rgba(34, 211, 238, 0.14);
+  backdrop-filter: blur(18px);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-0.5rem, -50%) scale(0.98);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.crystal-link-strategy-panel.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(0, -50%) scale(1);
+}
+
+.strategy-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  color: rgba(186, 230, 253, 0.98);
+}
+
+.strategy-title button {
+  border: 0;
+  border-radius: 999px;
+  width: 1.4rem;
+  height: 1.4rem;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(226, 232, 240, 0.84);
+}
+
+.strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-bottom: 0.7rem;
+}
+
+.strategy-grid div {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 0.95rem;
+  padding: 0.65rem;
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.strategy-grid small {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: rgba(148, 163, 184, 0.9);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+}
+
+.strategy-grid strong {
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 1.15rem;
+}
+
+.crystal-link-strategy-panel p {
+  min-height: 2.55rem;
+  margin: 0 0 0.75rem;
+  color: rgba(203, 213, 225, 0.9);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.strategy-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.strategy-actions button {
+  border: 1px solid rgba(103, 232, 249, 0.24);
+  border-radius: 0.85rem;
+  padding: 0.62rem 0.4rem;
+  background: rgba(8, 47, 73, 0.72);
+  color: rgba(224, 242, 254, 0.96);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.strategy-actions button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
 .crystal-link-hint-cell {
   outline: 3px solid rgba(250, 204, 21, 0.95) !important;
   outline-offset: 2px;
@@ -58,10 +160,29 @@
   to { transform: translateY(-2px) scale(1.07); }
 }
 
+@media (max-width: 820px) {
+  .crystal-link-strategy-panel {
+    left: 50%;
+    top: auto;
+    bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 6.25rem);
+    width: min(22rem, calc(100vw - 1.6rem));
+    transform: translate(-50%, 0.5rem) scale(0.98);
+  }
+
+  .crystal-link-strategy-panel.is-visible {
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
 @media (max-width: 480px) {
   .crystal-link-coach {
     right: 0.85rem;
     bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 3.1rem);
     padding: 0.52rem 0.68rem;
+  }
+
+  .crystal-link-strategy-panel {
+    bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 5.5rem);
+    padding: 0.75rem;
   }
 }
