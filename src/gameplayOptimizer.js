@@ -1,10 +1,12 @@
 const BOARD_SIZE = 8;
 const HUD_ID = 'crystal-link-hud';
 const COACH_ID = 'crystal-link-gameplay-coach';
+const PANEL_ID = 'crystal-link-strategy-panel';
 const GEM_NAMES = ['red', 'blue', 'green', 'yellow', 'purple', 'orange'];
 let scanTimer = 0;
 let hintTimer = 0;
 let lastDeadlock = '';
+let latestAnalysis = { board: null, moves: [] };
 
 function showHud(message, ms = 1600) {
   let hud = document.getElementById(HUD_ID);
@@ -37,17 +39,10 @@ function visibleGemCells() {
     const host = cellHost(svg);
     if (seen.has(host)) return null;
     seen.add(host);
-
     const hostRect = host.getBoundingClientRect();
     const svgRect = svg.getBoundingClientRect();
     const rect = hostRect.width >= 24 && hostRect.height >= 24 ? hostRect : svgRect;
-    return {
-      element: host,
-      rect,
-      type,
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2
-    };
+    return { element: host, rect, type, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   }).filter((cell) =>
     cell && cell.type >= 0 && cell.rect.width >= 24 && cell.rect.height >= 24 &&
     cell.rect.bottom > 0 && cell.rect.right > 0 &&
@@ -58,7 +53,6 @@ function visibleGemCells() {
 function readBoard() {
   const cells = visibleGemCells();
   if (cells.length < BOARD_SIZE * BOARD_SIZE) return null;
-
   const rows = [];
   cells.sort((a, b) => a.y - b.y || a.x - b.x).forEach((cell) => {
     const row = rows.find((candidate) => Math.abs(candidate.y - cell.y) < Math.max(12, cell.rect.height * 0.45));
@@ -69,15 +63,12 @@ function readBoard() {
       rows.push({ y: cell.y, cells: [cell] });
     }
   });
-
   const gridRows = rows
     .filter((row) => row.cells.length >= BOARD_SIZE)
     .sort((a, b) => a.y - b.y)
     .slice(0, BOARD_SIZE)
     .map((row) => row.cells.sort((a, b) => a.x - b.x).slice(0, BOARD_SIZE));
-
   if (gridRows.length !== BOARD_SIZE || gridRows.some((row) => row.length !== BOARD_SIZE)) return null;
-
   const grid = gridRows.map((row, r) => row.map((cell, c) => ({ ...cell, r, c })));
   return { grid, signature: grid.map((row) => row.map((cell) => cell.type).join('')).join('|') };
 }
@@ -115,7 +106,7 @@ function scoreSwap(board, a, b) {
   const matches = countMatches(grid);
   if (!matches) return 0;
   const centerBonus = 8 - Math.abs(3.5 - b.r) - Math.abs(3.5 - b.c);
-  return matches * 10 + (matches >= 4 ? 25 : 0) + centerBonus;
+  return Math.round(matches * 10 + (matches >= 4 ? 25 : 0) + centerBonus);
 }
 
 function findMoves(board) {
@@ -139,18 +130,24 @@ function clearHint() {
   });
 }
 
+function highlightMove(move) {
+  clearHint();
+  move.first.element.classList.add('crystal-link-hint-cell', 'crystal-link-hint-primary');
+  move.second.element.classList.add('crystal-link-hint-cell');
+  hintTimer = setTimeout(clearHint, 2600);
+}
+
 function showBestMove() {
   const board = readBoard();
   if (!board) return showHud('正在识别棋盘；请确认已进入 8×8 对局画面', 2200);
   const moves = findMoves(board);
+  latestAnalysis = { board, moves };
+  updatePanel(board, moves);
   if (!moves.length) {
     lastDeadlock = board.signature;
-    return showHud('当前棋盘无有效交换，建议使用洗牌道具', 2300);
+    return showHud('当前棋盘无有效交换，可用救场洗牌', 2300);
   }
-  clearHint();
-  moves[0].first.element.classList.add('crystal-link-hint-cell', 'crystal-link-hint-primary');
-  moves[0].second.element.classList.add('crystal-link-hint-cell');
-  hintTimer = setTimeout(clearHint, 2400);
+  highlightMove(moves[0]);
   showHud(`推荐走法已标出，约有 ${moves.length} 个可行交换`, 1900);
 }
 
@@ -169,6 +166,68 @@ function coachButton() {
   return button;
 }
 
+function panel() {
+  let node = document.getElementById(PANEL_ID);
+  if (!node) {
+    node = document.createElement('aside');
+    node.id = PANEL_ID;
+    node.className = 'crystal-link-strategy-panel';
+    node.innerHTML = `
+      <div class="strategy-title"><span>星盘分析</span><button data-action="collapse" type="button">×</button></div>
+      <div class="strategy-grid">
+        <div><small>可行交换</small><strong data-stat="moves">--</strong></div>
+        <div><small>最佳收益</small><strong data-stat="best">--</strong></div>
+      </div>
+      <p data-stat="status">等待棋盘稳定...</p>
+      <div class="strategy-actions">
+        <button data-action="hint" type="button">标出推荐</button>
+        <button data-action="shuffle" type="button">救场洗牌</button>
+      </div>`;
+    node.querySelector('[data-action="hint"]').addEventListener('click', showBestMove);
+    node.querySelector('[data-action="shuffle"]').addEventListener('click', rescueShuffle);
+    node.querySelector('[data-action="collapse"]').addEventListener('click', () => node.classList.remove('is-visible'));
+    document.body.appendChild(node);
+  }
+  return node;
+}
+
+function updatePanel(board, moves) {
+  const node = panel();
+  node.classList.toggle('is-visible', Boolean(board) || looksLikeGameScreen());
+  node.querySelector('[data-stat="moves"]').textContent = board ? String(moves.length) : '--';
+  node.querySelector('[data-stat="best"]').textContent = moves[0] ? String(moves[0].score) : '--';
+  const status = node.querySelector('[data-stat="status"]');
+  const shuffle = node.querySelector('[data-action="shuffle"]');
+  if (!board) {
+    status.textContent = '正在等待 8×8 棋盘渲染完成。';
+    shuffle.disabled = true;
+  } else if (!moves.length) {
+    status.textContent = '检测到死局。建议洗牌，不建议继续尝试随机交换。';
+    shuffle.disabled = false;
+  } else if (moves[0].score >= 65) {
+    status.textContent = '存在高价值走法，优先触发 4 连或更大消除。';
+    shuffle.disabled = true;
+  } else {
+    status.textContent = '棋盘正常。建议选择收益最高的相邻交换。';
+    shuffle.disabled = true;
+  }
+}
+
+function findShuffleButton() {
+  const icon = document.querySelector('svg.lucide-dices, svg[class*="dices"], svg[class*="Dices"]');
+  return icon?.closest('button') || null;
+}
+
+function rescueShuffle() {
+  const button = findShuffleButton();
+  if (!button || button.disabled) {
+    showHud('未找到可用洗牌按钮，请手动使用右下道具', 2200);
+    return;
+  }
+  button.click();
+  showHud('已触发洗牌道具，等待棋盘重构', 1800);
+}
+
 function looksLikeGameScreen() {
   const text = document.body?.innerText || '';
   return text.includes('MOVES') || text.includes('LV.') || visibleGemCells().length >= 16;
@@ -178,12 +237,15 @@ function analyzeSoon() {
   clearTimeout(scanTimer);
   scanTimer = setTimeout(() => {
     const board = readBoard();
-    coachButton().classList.toggle('is-visible', Boolean(board) || looksLikeGameScreen());
+    const moves = board ? findMoves(board) : [];
+    latestAnalysis = { board, moves };
+    const visible = Boolean(board) || looksLikeGameScreen();
+    coachButton().classList.toggle('is-visible', visible);
+    updatePanel(board, moves);
     if (!board) return clearHint();
-    const moves = findMoves(board);
     if (!moves.length && lastDeadlock !== board.signature) {
       lastDeadlock = board.signature;
-      showHud('检测到死局：没有可消除交换，建议洗牌', 2400);
+      showHud('检测到死局：可点面板里的救场洗牌', 2400);
     }
   }, 320);
 }
@@ -191,6 +253,7 @@ function analyzeSoon() {
 function boot() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   coachButton();
+  panel();
   const root = document.getElementById('root') || document.body;
   new MutationObserver(analyzeSoon).observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
   document.addEventListener('keydown', (event) => {
