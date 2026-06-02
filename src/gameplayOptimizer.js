@@ -7,6 +7,7 @@ let scanTimer = 0;
 let hintTimer = 0;
 let lastDeadlock = '';
 let latestAnalysis = { board: null, moves: [] };
+let panelPinnedClosed = false;
 
 function showHud(message, ms = 1600) {
   let hud = document.getElementById(HUD_ID);
@@ -142,6 +143,7 @@ function showBestMove() {
   if (!board) return showHud('正在识别棋盘；请确认已进入 8×8 对局画面', 2200);
   const moves = findMoves(board);
   latestAnalysis = { board, moves };
+  panelPinnedClosed = false;
   updatePanel(board, moves);
   if (!moves.length) {
     lastDeadlock = board.signature;
@@ -159,8 +161,8 @@ function coachButton() {
     button.type = 'button';
     button.dataset.safeClick = 'off';
     button.className = 'crystal-link-coach';
-    button.innerHTML = '<span>智能提示</span><strong>?</strong>';
-    button.addEventListener('click', showBestMove);
+    button.innerHTML = '<span>星盘面板</span><strong>↗</strong>';
+    button.addEventListener('click', togglePanel);
     document.body.appendChild(button);
   }
   return button;
@@ -185,15 +187,29 @@ function panel() {
       </div>`;
     node.querySelector('[data-action="hint"]').addEventListener('click', showBestMove);
     node.querySelector('[data-action="shuffle"]').addEventListener('click', rescueShuffle);
-    node.querySelector('[data-action="collapse"]').addEventListener('click', () => node.classList.remove('is-visible'));
+    node.querySelector('[data-action="collapse"]').addEventListener('click', () => {
+      panelPinnedClosed = true;
+      node.classList.remove('is-visible');
+    });
     document.body.appendChild(node);
   }
   return node;
 }
 
+function togglePanel() {
+  const node = panel();
+  panelPinnedClosed = node.classList.contains('is-visible');
+  node.classList.toggle('is-visible');
+  const button = coachButton();
+  button.querySelector('span').textContent = node.classList.contains('is-visible') ? '收起面板' : '星盘面板';
+}
+
 function updatePanel(board, moves) {
   const node = panel();
-  node.classList.toggle('is-visible', Boolean(board) || looksLikeGameScreen());
+  const shouldShow = (Boolean(board) || looksLikeGameScreen()) && !panelPinnedClosed;
+  node.classList.toggle('is-visible', shouldShow);
+  const button = coachButton();
+  button.querySelector('span').textContent = node.classList.contains('is-visible') ? '收起面板' : '星盘面板';
   node.querySelector('[data-stat="moves"]').textContent = board ? String(moves.length) : '--';
   node.querySelector('[data-stat="best"]').textContent = moves[0] ? String(moves[0].score) : '--';
   const status = node.querySelector('[data-stat="status"]');
@@ -242,9 +258,12 @@ function analyzeSoon() {
     const visible = Boolean(board) || looksLikeGameScreen();
     coachButton().classList.toggle('is-visible', visible);
     updatePanel(board, moves);
+    if (!visible) panelPinnedClosed = false;
     if (!board) return clearHint();
     if (!moves.length && lastDeadlock !== board.signature) {
       lastDeadlock = board.signature;
+      panelPinnedClosed = false;
+      updatePanel(board, moves);
       showHud('检测到死局：可点面板里的救场洗牌', 2400);
     }
   }, 320);
